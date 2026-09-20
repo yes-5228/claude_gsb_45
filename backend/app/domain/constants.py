@@ -2,7 +2,15 @@
 
 PERIOD_LABELS = {"hourly": "小时均值", "daily": "日均值"}
 
-DATA_SOURCE_LABELS = {"manual": "手工录入", "device": "设备上传", "import": "历史导入"}
+DATA_SOURCE_LABELS = {
+    "manual": "手工录入",
+    "device": "设备上传",
+    "import": "历史导入",
+    "auto": "自动汇总",
+}
+
+# 录入表单可选的数据来源 (自动汇总由系统生成, 不开放手工选择)
+MANUAL_DATA_SOURCE_CHOICES = ("manual", "device", "import")
 
 STATION_TYPE_LABELS = {
     "ambient": "环境空气",
@@ -36,3 +44,10 @@ def options_payload():
 
 def label_of(label_map, key):
     return label_map.get(key, key)
+
+
+def completeness_label(is_complete):
+    """自动汇总日均值的完整性标注 (None 表示非汇总数据, 返回空串)."""
+    if is_complete is None:
+        return ""
+    return "数据完整" if is_complete else "数据不完整"

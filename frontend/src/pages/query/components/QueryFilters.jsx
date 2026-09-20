@@ -22,7 +22,13 @@ const ANNOTATION_OPTIONS = [
 const SOURCE_OPTIONS = [
   { value: 'manual', label: '手工录入' },
   { value: 'device', label: '设备上传' },
-  { value: 'import', label: '历史导入' }
+  { value: 'import', label: '历史导入' },
+  { value: 'auto', label: '自动汇总' }
+]
+
+const COMPLETENESS_OPTIONS = [
+  { value: 'true', label: '数据完整' },
+  { value: 'false', label: '数据不完整' }
 ]
 
 export default function QueryFilters({ value, loading, onSubmit, onReset }) {
@@ -43,7 +49,7 @@ export default function QueryFilters({ value, loading, onSubmit, onReset }) {
       onReset={() => {
         setDraft({
           keyword: '', station_id: '', area: '', pollutant: '', period: '',
-          is_exceeded: '', exceedance_status: '', data_source: '',
+          is_exceeded: '', is_complete: '', exceedance_status: '', data_source: '',
           date_from: '', date_to: '', min_value: '', max_value: ''
         })
         onReset()
@@ -97,6 +103,14 @@ export default function QueryFilters({ value, loading, onSubmit, onReset }) {
       </Field>
       <Field label="数据来源">
         <Select value={draft.data_source || ''} onChange={update('data_source')} placeholder="全部来源" options={SOURCE_OPTIONS} />
+      </Field>
+      <Field label="数据完整性">
+        <Select
+          value={draft.is_complete || ''}
+          onChange={update('is_complete')}
+          placeholder="全部 (仅自动汇总日均值)"
+          options={COMPLETENESS_OPTIONS}
+        />
       </Field>
       <Field label="开始日期">
         <Input type="date" value={draft.date_from || ''} onChange={update('date_from')} />

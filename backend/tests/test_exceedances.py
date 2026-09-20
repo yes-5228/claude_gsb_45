@@ -22,10 +22,16 @@ def test_exceedance_records_are_created_automatically(client, station, entry_pay
     assert body["summary"]["exceeded_count"] == 2
 
     listed = client.get("/api/exceedances").get_json()
-    assert listed["total"] == 2
-    levels = {item["pollutant"]: item["level"] for item in listed["items"]}
-    assert levels == {"SO2": "light", "NO2": "moderate"}
-    assert listed["summary"]["pending"] == 2
+    # 小时值 2 条 + 自动汇总日均值 2 条 (日均限值更低, 等级更高)
+    assert listed["total"] == 4
+    levels = {(item["pollutant"], item["period"]): item["level"] for item in listed["items"]}
+    assert levels == {
+        ("SO2", "hourly"): "light",
+        ("SO2", "daily"): "severe",
+        ("NO2", "hourly"): "moderate",
+        ("NO2", "daily"): "severe",
+    }
+    assert listed["summary"]["pending"] == 4
     assert listed["summary"]["by_status"][0]["key"] == "pending"
 
 
@@ -71,9 +77,9 @@ def test_batch_annotation_updates_selected_records(client, station, entry_payloa
     )
     assert response.status_code == 200
     body = response.get_json()
-    assert body["updated"] == 2
+    assert body["updated"] == 4
     assert body["missing"] == []
-    assert Exceedance.query.filter_by(status="ignored").count() == 2
+    assert Exceedance.query.filter_by(status="ignored").count() == 4
 
     missing = client.post(
         "/api/exceedances/annotations",
@@ -99,7 +105,7 @@ def test_exceedance_filters_and_summary(client, station, entry_payload):
     assert only_so2["summary"]["total"] == 1
 
     annotated = client.get("/api/exceedances?annotated=false").get_json()
-    assert annotated["total"] == 2
+    assert annotated["total"] == 4
 
     detail = client.get("/api/exceedances/%d" % only_so2["items"][0]["id"]).get_json()
     assert detail["measurement"]["station"]["code"] == "TEST-001"

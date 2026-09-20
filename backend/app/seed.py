@@ -61,14 +61,14 @@ HOURLY_FACTOR = {"PM25": 1.0, "PM10": 1.05, "SO2": 0.8, "NO2": 1.1, "CO": 0.9, "
 STATION_FACTOR = {
     "ambient": 1.0, "traffic": 1.2, "industrial": 1.35, "background": 0.55, "rural": 0.75,
 }
-HOURLY_POINTS = (2, 8, 14, 20)
+FULL_DAY_HOURS = tuple(range(24))  # 历史日: 全天 24 个小时均值, 日均值数据完整
+TODAY_HOURS = (0, 4, 8, 12, 16, 20)  # 当日: 小时数据尚未收齐, 演示"数据不完整"标注
 RECORDERS = ("李静", "王敏", "陈志强", "赵宇", "孙倩")
 
 
-def _value(pollutant, period, station_type, rng):
+def _hourly_value(pollutant, station_type, rng):
     base = POLLUTANT_BASE[pollutant] * STATION_FACTOR.get(station_type, 1.0)
-    if period == "hourly":
-        base *= HOURLY_FACTOR[pollutant]
+    base *= HOURLY_FACTOR[pollutant]
     value = base * rng.uniform(0.72, 1.22)
     if rng.random() < 0.12:  # 少量明显超标样本, 便于演示超标标注
         value *= rng.uniform(1.8, 2.6)
@@ -77,7 +77,7 @@ def _value(pollutant, period, station_type, rng):
 
 def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
     """Generate demo stations and monitoring records through the normal service path."""
-    from .services import measurement_service
+    from .services import aggregation_service, measurement_service
 
     rng = rng or random.Random(20260914)
     created_stations = []
@@ -89,28 +89,15 @@ def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
 
     today = date.today()
     totals = {"stations": len(created_stations), "measurements": 0, "exceedances": 0}
-    for station in created_stations:
+    for station_index, station in enumerate(created_stations):
+        # 偶数站点模拟设备上传, 奇数站点模拟手工录入
+        hourly_source = "device" if station_index % 2 == 0 else "manual"
         for offset in range(days):
             day = today - timedelta(days=offset)
-            daily_entries = [
-                {"pollutant": code, "value": _value(code, "daily", station.station_type, rng)}
-                for code in POLLUTANT_BASE
-            ]
-            result = measurement_service.record_entries(
-                station_id=station.id,
-                measured_at=datetime(day.year, day.month, day.day, 0, 0),
-                period="daily",
-                entries=daily_entries,
-                data_source="device",
-                recorder=rng.choice(recorder_pool),
-                remark="日均值自动汇总",
-            )
-            totals["measurements"] += result["summary"]["created_count"]
-            totals["exceedances"] += result["summary"]["exceeded_count"]
-
-            for hour in HOURLY_POINTS:
+            hours = TODAY_HOURS if offset == 0 else FULL_DAY_HOURS
+            for hour in hours:
                 hourly_entries = [
-                    {"pollutant": code, "value": _value(code, "hourly", station.station_type, rng)}
+                    {"pollutant": code, "value": _hourly_value(code, station.station_type, rng)}
                     for code in HOURLY_FACTOR
                 ]
                 result = measurement_service.record_entries(
@@ -118,11 +105,17 @@ def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
                     measured_at=datetime(day.year, day.month, day.day, hour, 0),
                     period="hourly",
                     entries=hourly_entries,
-                    data_source="manual",
+                    data_source=hourly_source,
                     recorder=rng.choice(recorder_pool),
+                    auto_aggregate=False,
                 )
                 totals["measurements"] += result["summary"]["created_count"]
                 totals["exceedances"] += result["summary"]["exceeded_count"]
+
+            # 小时值自动汇总为日均值 (当天小时数不足, 自动标注"数据不完整")
+            aggregation = aggregation_service.aggregate_daily(station.id, day)
+            totals["measurements"] += aggregation["summary"]["created"]
+            totals["exceedances"] += aggregation["summary"]["exceeded"]
 
     # 标注一部分超标记录, 让工作台同时存在待办与已处理记录
     from .services import exceedance_service

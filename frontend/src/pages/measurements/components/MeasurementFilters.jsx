@@ -13,6 +13,11 @@ const EXCEEDED_OPTIONS = [
   { value: 'false', label: '仅达标' }
 ]
 
+const COMPLETENESS_OPTIONS = [
+  { value: 'true', label: '数据完整' },
+  { value: 'false', label: '数据不完整' }
+]
+
 export default function MeasurementFilters({ value, loading, onSubmit, onReset }) {
   const [draft, setDraft] = useState(value)
   const { data: stationData } = useStationOptions()
@@ -29,7 +34,7 @@ export default function MeasurementFilters({ value, loading, onSubmit, onReset }
       loading={loading}
       onSearch={() => onSubmit(draft)}
       onReset={() => {
-        setDraft({ station_id: '', pollutant: '', period: '', is_exceeded: '', date_from: '', date_to: '' })
+        setDraft({ station_id: '', pollutant: '', period: '', is_exceeded: '', is_complete: '', date_from: '', date_to: '' })
         onReset()
       }}
     >
@@ -57,6 +62,14 @@ export default function MeasurementFilters({ value, loading, onSubmit, onReset }
       </Field>
       <Field label="超标情况">
         <Select value={draft.is_exceeded || ''} onChange={update('is_exceeded')} placeholder="全部" options={EXCEEDED_OPTIONS} />
+      </Field>
+      <Field label="数据完整性">
+        <Select
+          value={draft.is_complete || ''}
+          onChange={update('is_complete')}
+          placeholder="全部 (仅自动汇总日均值)"
+          options={COMPLETENESS_OPTIONS}
+        />
       </Field>
       <Field label="开始日期">
         <Input type="date" value={draft.date_from || ''} onChange={update('date_from')} />

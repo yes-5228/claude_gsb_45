@@ -1,4 +1,5 @@
 import DataTable from '../../../components/common/DataTable.jsx'
+import CompletenessTag from '../../../components/common/CompletenessTag.jsx'
 import Tag from '../../../components/common/Tag.jsx'
 import { DATA_SOURCE_TONE } from '../../../constants/index.js'
 import { formatDateTime, formatNumber, formatRatio } from '../../../utils/format.js'
@@ -17,7 +18,17 @@ export default function MeasurementTable({ rows, loading, onDelete }) {
       )
     },
     { key: 'pollutant_label', title: '监测因子', className: 'cell-nowrap' },
-    { key: 'period_label', title: '周期', className: 'cell-nowrap' },
+    {
+      key: 'period_label',
+      title: '周期',
+      className: 'cell-nowrap',
+      render: (row) => (
+        <div className="inline" style={{ flexWrap: 'nowrap' }}>
+          <span>{row.period_label}</span>
+          <CompletenessTag isComplete={row.is_complete} validHours={row.valid_hours} />
+        </div>
+      )
+    },
     {
       key: 'value',
       title: '监测值',

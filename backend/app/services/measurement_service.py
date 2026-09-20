@@ -1,9 +1,11 @@
-"""监测数据录入业务逻辑 (含超标自动判定)."""
+"""监测数据录入业务逻辑 (含超标自动判定与小时值日均汇总)."""
 from ..domain import exceedance_rules
 from ..domain.standards import get_pollutant
 from ..errors import ConflictError, NotFoundError, ValidationError
 from ..extensions import db
-from ..models import Exceedance, Measurement, Station
+from ..models import Measurement, Station
+from . import aggregation_service
+from .exceedance_service import sync_exceedance
 
 
 def get_measurement(measurement_id):
@@ -48,11 +50,12 @@ def _load_station(station_id):
 
 
 def record_entries(station_id, measured_at, period, entries, data_source="manual",
-                   recorder=None, remark=None, overwrite=False):
+                   recorder=None, remark=None, overwrite=False, auto_aggregate=True):
     """Persist one measured_at snapshot for a station.
 
     Duplicate (station, pollutant, period, measured_at) rows are reported back;
     when ``overwrite`` is true the existing row is refreshed instead.
+    小时数据写入后自动汇总当日日均值 (``auto_aggregate`` 可关闭, 供批量导入使用).
     """
     station = _load_station(station_id)
     if not entries:
@@ -126,7 +129,7 @@ def record_entries(station_id, measured_at, period, entries, data_source="manual
         record.recorder = entry.get("recorder") or recorder
         record.remark = entry.get("remark") or remark
 
-        _sync_exceedance(record, meta, evaluation)
+        sync_exceedance(record, meta, evaluation)
         db.session.flush()
         (created if is_new else updated).append(record.to_dict(include_station=True))
         if evaluation["exceeded"]:
@@ -139,7 +142,7 @@ def record_entries(station_id, measured_at, period, entries, data_source="manual
         )
 
     db.session.commit()
-    return {
+    result = {
         "station": station.to_option(),
         "measured_at": measured_at.isoformat(timespec="seconds"),
         "period": period,
@@ -155,35 +158,21 @@ def record_entries(station_id, measured_at, period, entries, data_source="manual
             "duplicate_count": len(duplicates),
         },
     }
-
-
-def _sync_exceedance(record, meta, evaluation):
-    """Create / refresh / drop the exceedance row attached to a measurement."""
-    if evaluation["exceeded"]:
-        if record.exceedance is None:
-            record.exceedance = Exceedance(
-                station_id=record.station_id,
-                pollutant=record.pollutant,
-                period=record.period,
-                measured_at=record.measured_at,
-                value=record.value,
-                limit_value=evaluation["limit"],
-                exceed_ratio=evaluation["ratio"],
-                level=evaluation["level"],
-                status="pending",
-            )
-        else:
-            record.exceedance.value = record.value
-            record.exceedance.limit_value = evaluation["limit"]
-            record.exceedance.exceed_ratio = evaluation["ratio"]
-            record.exceedance.level = evaluation["level"]
-            record.exceedance.measured_at = record.measured_at
-    elif record.exceedance is not None:
-        db.session.delete(record.exceedance)
+    if period == "hourly" and auto_aggregate:
+        result["daily_aggregation"] = aggregation_service.aggregate_daily(
+            station.id, measured_at.date()
+        )
+    return result
 
 
 def delete_measurement(measurement):
     payload = measurement.to_dict()
+    station_id = measurement.station_id
+    measured_date = measurement.measured_at.date()
+    period = measurement.period
     db.session.delete(measurement)
     db.session.commit()
+    if period == "hourly":
+        # 小时数据删除后重算当日日均值 (当日无有效小时时自动撤销)
+        aggregation_service.aggregate_daily(station_id, measured_date)
     return payload

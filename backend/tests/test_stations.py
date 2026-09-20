@@ -65,20 +65,21 @@ def test_invalid_choice_is_rejected(client, station):
 def test_station_detail_returns_pollutant_stats(client, station, entry_payload):
     client.post("/api/measurements/entries", json=entry_payload(station.id))
     body = client.get("/api/stations/%d" % station.id).get_json()
-    assert body["stats"]["measurement_count"] == 3
-    assert body["stats"]["exceeded_count"] == 1
-    assert body["stats"]["pending_count"] == 1
+    # 3 条小时值 + 3 条自动汇总日均值, SO2 两个周期均超标
+    assert body["stats"]["measurement_count"] == 6
+    assert body["stats"]["exceeded_count"] == 2
+    assert body["stats"]["pending_count"] == 2
     pollutants = {item["pollutant"] for item in body["stats"]["pollutants"]}
     assert pollutants == {"PM25", "SO2", "CO"}
 
 
 def test_delete_station_removes_measurements_and_exceedances(client, app, station, entry_payload):
     client.post("/api/measurements/entries", json=entry_payload(station.id))
-    assert Measurement.query.count() == 3
+    assert Measurement.query.count() == 6
 
     response = client.delete("/api/stations/%d" % station.id)
     assert response.status_code == 200
-    assert response.get_json()["removed"] == {"measurements_removed": 3, "exceedances_removed": 1}
+    assert response.get_json()["removed"] == {"measurements_removed": 6, "exceedances_removed": 2}
     assert Station.query.count() == 0
     assert Measurement.query.count() == 0
 

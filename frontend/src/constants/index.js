@@ -11,7 +11,7 @@ export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 export const STATION_STATUS_TONE = { active: 'success', maintenance: 'warning', offline: 'neutral' }
 export const EXCEEDANCE_STATUS_TONE = { pending: 'warning', confirmed: 'danger', ignored: 'neutral' }
 export const EXCEEDANCE_LEVEL_TONE = { light: 'info', moderate: 'warning', severe: 'danger' }
-export const DATA_SOURCE_TONE = { manual: 'primary', device: 'info', import: 'neutral' }
+export const DATA_SOURCE_TONE = { manual: 'primary', device: 'info', import: 'neutral', auto: 'success' }
 
 export const EXCEEDANCE_LEVEL_LABELS = { light: '轻度超标', moderate: '中度超标', severe: '重度超标' }
 export const EXCEEDANCE_STATUS_LABELS = { pending: '待标注', confirmed: '已确认', ignored: '已忽略' }

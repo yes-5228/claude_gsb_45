@@ -22,6 +22,7 @@ const INITIAL_FILTERS = {
   pollutant: '',
   period: '',
   is_exceeded: '',
+  is_complete: '',
   date_from: '',
   date_to: ''
 }

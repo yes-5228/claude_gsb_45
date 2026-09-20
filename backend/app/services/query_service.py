@@ -84,6 +84,7 @@ def parse_filters(args):
         "periods": periods,
         "data_sources": _split(args.get("data_source")),
         "is_exceeded": _bool_arg(args, "is_exceeded"),
+        "is_complete": _bool_arg(args, "is_complete"),
         "exceedance_status": _split(args.get("exceedance_status")),
         "date_from": _date_arg(args, "date_from"),
         "date_to": _date_arg(args, "date_to", end_of_day=True),
@@ -121,6 +122,9 @@ def apply_filters(query, filters):
         query = query.filter(Measurement.data_source.in_(filters["data_sources"]))
     if filters["is_exceeded"] is not None:
         query = query.filter(Measurement.is_exceeded.is_(filters["is_exceeded"]))
+    if filters["is_complete"] is not None:
+        # 仅匹配显式标记的自动汇总日均值, 非汇总数据该字段为 NULL 不受影响
+        query = query.filter(Measurement.is_complete.is_(filters["is_complete"]))
     if filters["date_from"]:
         query = query.filter(Measurement.measured_at >= filters["date_from"])
     if filters["date_to"]:

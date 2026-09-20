@@ -32,6 +32,8 @@ class BaseConfig:
     CORS_ORIGINS = _as_list(os.getenv("CORS_ORIGINS"), ["*"])
     TIMEZONE = os.getenv("TIMEZONE", "Asia/Shanghai")
     LIMIT_POLICY = "GB 3095-2012 环境空气质量标准(二级)"
+    # 日均值有效性: 当日至少需要的有效小时数 (GB 3095-2012 要求 24 小时平均至少 20 个小时均值)
+    DAILY_MIN_VALID_HOURS = int(os.getenv("DAILY_MIN_VALID_HOURS", "20"))
 
     DEFAULT_PAGE_SIZE = 20
     MAX_PAGE_SIZE = 200

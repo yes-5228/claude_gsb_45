@@ -264,6 +264,13 @@ export default function EntryForm({ onPreview, onSubmitted }) {
           </div>
         </div>
 
+        {form.period === 'hourly' ? (
+          <Alert tone="info">
+            提交后系统自动汇总当日日均值: 有效小时数 ≥ {pollutantData?.daily_min_valid_hours ?? 20}{' '}
+            视为数据完整, 不足将标注“数据不完整”; 日均值同样参与超标判定与统计查询
+          </Alert>
+        ) : null}
+
         <div className="inline">
           <button type="button" className="btn" onClick={runPreview} disabled={busy !== null}>
             {busy === 'preview' ? '校验中...' : '超标校验预览'}

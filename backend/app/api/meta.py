@@ -41,6 +41,7 @@ def pollutants():
         "items": list(POLLUTANTS.values()),
         "policy": current_app.config["LIMIT_POLICY"],
         "periods": [{"value": key, "label": label} for key, label in PERIOD_LABELS.items()],
+        "daily_min_valid_hours": current_app.config["DAILY_MIN_VALID_HOURS"],
     }
 
 

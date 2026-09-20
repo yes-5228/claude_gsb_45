@@ -30,6 +30,72 @@ function ResultTable({ columns, rows }) {
   )
 }
 
+const AGGREGATION_STATUS = {
+  created: { label: '新生成', tone: 'primary' },
+  updated: { label: '已刷新', tone: 'info' },
+  removed: { label: '已撤销', tone: 'neutral' },
+  skipped: { label: '保留人工数据', tone: 'neutral' }
+}
+
+function DailyAggregationCard({ aggregation }) {
+  const rows = (aggregation.items || []).map((item) => ({ key: item.pollutant, ...item }))
+  const columns = [
+    { key: 'pollutant', title: '监测因子', render: (row) => row.pollutant_label || row.pollutant },
+    {
+      key: 'value',
+      title: '日均值',
+      render: (row) =>
+        row.value === null || row.value === undefined ? '-' : `${formatNumber(row.value)} ${row.unit || ''}`
+    },
+    { key: 'valid_hours', title: '有效小时', render: (row) => `${row.valid_hours}/${row.required_hours}` },
+    {
+      key: 'status',
+      title: '数据状态',
+      render: (row) => {
+        const meta = AGGREGATION_STATUS[row.status] || { label: row.status, tone: 'neutral' }
+        return (
+          <div className="inline" style={{ flexWrap: 'nowrap' }}>
+            <Tag tone={meta.tone} title={row.message || undefined}>{meta.label}</Tag>
+            {row.is_complete === false ? <Tag tone="warning">数据不完整</Tag> : null}
+          </div>
+        )
+      }
+    },
+    {
+      key: 'exceeded',
+      title: '超标判定',
+      render: (row) => {
+        if (row.status === 'removed' || row.status === 'skipped') return <span className="muted">-</span>
+        return row.is_exceeded ? (
+          <Tag tone="danger">超标 {formatNumber(row.exceed_ratio, 2)} 倍</Tag>
+        ) : (
+          <Tag tone="success">达标</Tag>
+        )
+      }
+    }
+  ]
+  const summary = aggregation.summary || {}
+  return (
+    <div className="card" style={{ boxShadow: 'none' }}>
+      <div className="card-header">
+        <h3>日均值自动汇总 ({aggregation.date})</h3>
+        <span className="hint">有效小时 ≥ {aggregation.required_hours} 视为数据完整</span>
+      </div>
+      <div className="card-body">
+        <div className="stack">
+          <Alert tone={summary.incomplete ? 'warning' : 'info'}>
+            已汇总 {aggregation.station?.name || ''} 当日小时数据: 新增 {summary.created ?? 0} / 刷新{' '}
+            {summary.updated ?? 0} 条日均值
+            {summary.incomplete ? `, 其中 ${summary.incomplete} 个因子有效小时不足, 已标注“数据不完整”` : ''}
+            {summary.exceeded ? `, ${summary.exceeded} 个因子日均值超标已生成待标注记录` : ''}
+          </Alert>
+          <ResultTable columns={columns} rows={rows} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function EntryResultPanel({ result, summary, onClose }) {
   if (!result) {
     return (
@@ -159,6 +225,10 @@ export default function EntryResultPanel({ result, summary, onClose }) {
         )}
 
         <ResultTable columns={columns} rows={rows} />
+
+        {!isPreview && payload.daily_aggregation ? (
+          <DailyAggregationCard aggregation={payload.daily_aggregation} />
+        ) : null}
 
         {payload.duplicates?.length ? (
           <Alert tone="warning">

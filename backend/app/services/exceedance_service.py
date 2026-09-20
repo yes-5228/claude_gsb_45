@@ -48,6 +48,31 @@ def get_exceedance(exceedance_id):
     return exceedance
 
 
+def sync_exceedance(record, meta, evaluation):
+    """根据判定结果创建 / 刷新 / 删除监测数据对应的超标记录."""
+    if evaluation["exceeded"]:
+        if record.exceedance is None:
+            record.exceedance = Exceedance(
+                station_id=record.station_id,
+                pollutant=record.pollutant,
+                period=record.period,
+                measured_at=record.measured_at,
+                value=record.value,
+                limit_value=evaluation["limit"],
+                exceed_ratio=evaluation["ratio"],
+                level=evaluation["level"],
+                status="pending",
+            )
+        else:
+            record.exceedance.value = record.value
+            record.exceedance.limit_value = evaluation["limit"]
+            record.exceedance.exceed_ratio = evaluation["ratio"]
+            record.exceedance.level = evaluation["level"]
+            record.exceedance.measured_at = record.measured_at
+    elif record.exceedance is not None:
+        db.session.delete(record.exceedance)
+
+
 def exceedance_query(args):
     query = db.session.query(Exceedance).join(Station, Exceedance.station_id == Station.id)
 

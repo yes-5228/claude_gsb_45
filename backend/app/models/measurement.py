@@ -1,5 +1,10 @@
 """监测数据记录."""
-from ..domain.constants import DATA_SOURCE_LABELS, PERIOD_LABELS, label_of
+from ..domain.constants import (
+    DATA_SOURCE_LABELS,
+    PERIOD_LABELS,
+    completeness_label,
+    label_of,
+)
 from ..domain.standards import get_pollutant
 from ..extensions import db
 from .base import TimestampMixin, iso
@@ -29,6 +34,9 @@ class Measurement(TimestampMixin, db.Model):
     data_source = db.Column(db.String(16), nullable=False, default="manual")
     recorder = db.Column(db.String(64))
     remark = db.Column(db.Text)
+    # 自动汇总日均值专用: 参与计算的有效小时数与完整性标记 (非汇总数据为 NULL)
+    valid_hours = db.Column(db.Integer)
+    is_complete = db.Column(db.Boolean)
 
     station = db.relationship("Station", back_populates="measurements")
     exceedance = db.relationship(
@@ -61,6 +69,9 @@ class Measurement(TimestampMixin, db.Model):
             "data_source_label": label_of(DATA_SOURCE_LABELS, self.data_source),
             "recorder": self.recorder,
             "remark": self.remark,
+            "valid_hours": self.valid_hours,
+            "is_complete": self.is_complete,
+            "completeness_label": completeness_label(self.is_complete),
             "created_at": iso(self.created_at),
             "updated_at": iso(self.updated_at),
             "exceedance_id": self.exceedance.id if self.exceedance else None,
