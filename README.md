@@ -10,13 +10,14 @@
 | --- | --- | --- |
 | 运行概览 | `/overview` | 监测点规模、数据总量、超标与待标注统计、近 7 日数据量趋势、待办超标列表 |
 | 监测点台账 | `/stations` | 台账增删改查、区域/类型/状态筛选、点位详情与分因子统计、级联清理关联数据 |
-| 监测数据录入 | `/measurements` | 按“监测点 + 时刻 + 周期”成组录入多因子浓度、超标校验预览、重复数据覆盖、录入结果回执 |
+| 监测数据录入 | `/measurements` | 按“监测点 + 时刻 + 周期”成组录入多因子浓度、超标校验预览、重复数据覆盖、小时值自动汇总日均、录入结果回执 |
 | 超标记录标注 | `/exceedances` | 超标自动建单、单条/批量标注(确认 / 忽略 / 重置)、等级人工修正、标注留痕与统计 |
 | 数据查询 | `/query` | 多条件组合检索、聚合统计(按因子/站点/区域/日/月等)、分页浏览、CSV 导出 |
 
 设计要点:
 
 - **超标自动判定**: 数据写入时即按“因子 + 数据周期”取用限值, 计算超标倍数并分级, 同步生成待标注超标记录; 修正数据后超标记录自动更新或撤销。
+- **小时值自动汇总日均**: 录入或删除小时数据后按自然日自动重算日均值, 当日有效小时数达标才生成日均记录, 不足时在录入回执中标注“数据不完整”; 生成的日均值同样参与超标判定与统计查询。
 - **业务规则集中在后端**: 限值与分级规则位于 `backend/app/domain/`, 前端仅做展示与前置校验, 避免规则分叉。
 - **模块化组织**: 后端按 `api / services / models / domain / utils` 分层; 前端每个业务模块独占目录, 公共能力沉淀在 `components/`、`hooks/`、`api/`。
 
@@ -28,7 +29,7 @@
 | 数据库 | SQLite(默认, 零依赖) / PostgreSQL 16(可选, compose 覆盖文件) |
 | 前端 | React 18 · React Router 6 · Vite 7 · Axios · 原生 CSS(设计令牌 + 组件类) |
 | 部署 | Docker 多阶段构建 · Nginx 静态托管与 `/api` 反向代理 · docker compose |
-| 测试 | Pytest(43 个后端用例: 接口 + 领域规则) |
+| 测试 | Pytest(55 个后端用例: 接口 + 领域规则) |
 
 ## 目录结构
 
@@ -42,7 +43,7 @@
 │   │   ├── errors.py            # 统一异常与 JSON 错误响应
 │   │   ├── commands.py          # flask init-db / seed / reset-db / stats
 │   │   ├── seed.py              # 演示数据生成与启动引导
-│   │   ├── domain/              # 业务规则: 因子限值、枚举、超标分级
+│   │   ├── domain/              # 业务规则: 因子限值、枚举、超标分级、日均汇总
 │   │   ├── models/              # Station / Measurement / Exceedance
 │   │   ├── services/            # 台账、录入、标注、查询统计业务逻辑
 │   │   ├── api/                 # 蓝图: meta / stations / measurements / exceedances / query
@@ -80,7 +81,7 @@ docker compose up -d --build
 | 前端 | http://localhost:8080 | Nginx 托管, `/api` 反向代理到后端 |
 | 后端 | http://localhost:5000/api/meta/health | 健康检查 |
 
-首次启动会自动建表并写入演示数据(8 个监测点 / 1200 条监测数据 / 52 条超标记录), 可通过环境变量 `SEED_DEMO=false` 关闭。
+首次启动会自动建表并写入演示数据(8 个监测点 / 2976 条监测数据(含自动汇总日均值) / 122 条超标记录), 可通过环境变量 `SEED_DEMO=false` 关闭。
 
 ```bash
 docker compose ps          # 查看容器与健康状态
@@ -141,6 +142,16 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 - **无 1 小时限值的因子**(PM2.5、PM10 小时值)仅记录数值, 不参与超标判定, 避免误报。
 - **标注状态**: `待标注(pending)` 由系统自动创建, 人工标注为 `已确认(confirmed)` 或 `已忽略(ignored)`; 确认与忽略都必须填写标注说明, 用于后续追溯。
 
+## 日均自动汇总规则
+
+汇总规则位于 `backend/app/domain/aggregation.py`, 录入联动位于 `backend/app/services/measurement_service.py`。
+
+- **触发时机**: 录入(含覆盖)或删除小时值后, 自动重算该监测点当日对应因子的日均值, 与本次写入同一事务提交。
+- **有效性门槛**: 依据 GB 3095-2012 数据有效性要求, 当日有效小时数 **≥ 20**(可通过 `DAILY_MIN_VALID_HOURS` 调整)才生成日均记录; 不足时不生成, 录入回执的 `daily_aggregation` 中标注“数据不完整”并给出参考均值。
+- **自动撤销**: 删除小时数据导致有效小时数跌破门槛时, 此前生成的日均记录及其超标记录一并撤销。
+- **人工数据保护**: 当日已存在人工录入(手工/设备/导入)的日均值时, 自动汇总跳过, 不覆盖人工数据。
+- **可识别可追溯**: 自动生成的日均值 `data_source = aggregate`(日均自动汇总), `valid_hours` 记录参与计算的有效小时数; 与手工数据一样参与超标判定、统计查询与 CSV 导出。
+
 ## API 概览
 
 统一前缀 `/api`, 成功直接返回数据对象; 失败返回 `{"error": {"code": "...", "message": "...", "fields": {...}}}`。
@@ -188,7 +199,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 }
 ```
 
-响应会返回本次新增/更新条数、超标记录、重复项与逐因子判定结果:
+响应会返回本次新增/更新条数、超标记录、重复项、逐因子判定结果, 以及小时录入触发的日均自动汇总结果:
 
 ```json
 {
@@ -196,16 +207,34 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
   "updated": [],
   "exceedances": [ { "pollutant": "SO2", "level": "moderate", "exceed_ratio": 1.28 } ],
   "duplicates": [],
+  "daily_aggregation": {
+    "date": "2026-09-14",
+    "min_valid_hours": 20,
+    "generated_count": 0,
+    "incomplete_count": 3,
+    "items": [
+      {
+        "pollutant": "PM25",
+        "status": "incomplete",
+        "valid_hours": 1,
+        "required_hours": 20,
+        "value": 82.5,
+        "message": "数据不完整: 当日有效小时数 1/20, 暂不生成日均值"
+      }
+    ]
+  },
   "summary": { "created_count": 3, "updated_count": 0, "exceeded_count": 1, "duplicate_count": 0 }
 }
 ```
+
+`daily_aggregation.items[].status` 取值: `created` / `updated`(已生成或更新日均值)、`incomplete`(数据不完整, 未生成)、`removed`(有效小时数跌破门槛, 已撤销)、`skipped`(当日已有人工日均值, 未覆盖)。
 
 ## 数据模型
 
 | 表 | 关键字段 | 说明 |
 | --- | --- | --- |
 | `stations` | `code`(唯一) `name` `area` `station_type` `status` `longitude/latitude` `installed_at` | 监测点台账 |
-| `measurements` | `station_id` `pollutant` `period` `value` `limit_value` `exceed_ratio` `is_exceeded` `measured_at` `data_source` `recorder` | 监测数据; `(station_id, pollutant, period, measured_at)` 唯一 |
+| `measurements` | `station_id` `pollutant` `period` `value` `limit_value` `exceed_ratio` `is_exceeded` `measured_at` `data_source` `valid_hours` `recorder` | 监测数据; `(station_id, pollutant, period, measured_at)` 唯一; `valid_hours` 仅日均自动汇总数据有值 |
 | `exceedances` | `measurement_id`(唯一) `status` `level` `note` `annotator` `annotated_at` | 超标记录与人工标注 |
 
 删除监测点会级联清理其监测数据与超标记录; 删除监测数据会同时删除对应超标记录。
@@ -218,6 +247,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 | `DATABASE_URL` | SQLite(`backend/instance/air_monitor.db`) | 如 `postgresql+psycopg2://user:pass@host:5432/db` |
 | `CORS_ORIGINS` | `*` | 允许的前端来源, 逗号分隔 |
 | `TIMEZONE` | `Asia/Shanghai` | 展示时区 |
+| `DAILY_MIN_VALID_HOURS` | `20` | 日均自动汇总所需的最少当日有效小时数 |
 | `AUTO_INIT_DB` / `AUTO_SEED` | `true`(开发) | 启动时自动建表 / 写入演示数据 |
 | `SEED_DEMO` | `true` | Docker 容器启动时是否写入演示数据 |
 | `GUNICORN_WORKERS` | `2` | 生产容器 worker 数量 |
@@ -228,7 +258,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 
 ```bash
 cd backend
-python -m pytest -q          # 43 个用例: 台账 CRUD/级联、录入与超标判定、标注规则、查询统计与导出、元数据接口
+python -m pytest -q          # 55 个用例: 台账 CRUD/级联、录入与超标判定、小时值日均自动汇总、标注规则、查询统计与导出、元数据接口
 
 cd frontend
 npm run build                # 生产构建校验

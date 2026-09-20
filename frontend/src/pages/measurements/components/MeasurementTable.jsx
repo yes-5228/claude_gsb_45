@@ -17,7 +17,19 @@ export default function MeasurementTable({ rows, loading, onDelete }) {
       )
     },
     { key: 'pollutant_label', title: '监测因子', className: 'cell-nowrap' },
-    { key: 'period_label', title: '周期', className: 'cell-nowrap' },
+    {
+      key: 'period_label',
+      title: '周期',
+      className: 'cell-nowrap',
+      render: (row) => (
+        <div>
+          <div>{row.period_label}</div>
+          {row.is_auto_aggregated && row.valid_hours !== null && row.valid_hours !== undefined ? (
+            <div className="small muted">基于 {row.valid_hours} 个小时值</div>
+          ) : null}
+        </div>
+      )
+    },
     {
       key: 'value',
       title: '监测值',

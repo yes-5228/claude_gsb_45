@@ -62,6 +62,7 @@ STATION_FACTOR = {
     "ambient": 1.0, "traffic": 1.2, "industrial": 1.35, "background": 0.55, "rural": 0.75,
 }
 HOURLY_POINTS = (2, 8, 14, 20)
+FULL_DAYS = 2  # 最近几天补齐 24 个小时点, 演示小时值自动汇总日均; 其余天数小时数不足, 不生成日均
 RECORDERS = ("李静", "王敏", "陈志强", "赵宇", "孙倩")
 
 
@@ -92,23 +93,10 @@ def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
     for station in created_stations:
         for offset in range(days):
             day = today - timedelta(days=offset)
-            daily_entries = [
-                {"pollutant": code, "value": _value(code, "daily", station.station_type, rng)}
-                for code in POLLUTANT_BASE
-            ]
-            result = measurement_service.record_entries(
-                station_id=station.id,
-                measured_at=datetime(day.year, day.month, day.day, 0, 0),
-                period="daily",
-                entries=daily_entries,
-                data_source="device",
-                recorder=rng.choice(recorder_pool),
-                remark="日均值自动汇总",
-            )
-            totals["measurements"] += result["summary"]["created_count"]
-            totals["exceedances"] += result["summary"]["exceeded_count"]
-
-            for hour in HOURLY_POINTS:
+            # 最近的 FULL_DAYS 天模拟全天连续监测(24 个小时点), 其余天数只有零散小时点;
+            # 日均值不再手工录入, 由录入小时值后自动汇总生成
+            hours = range(24) if offset < FULL_DAYS else HOURLY_POINTS
+            for hour in hours:
                 hourly_entries = [
                     {"pollutant": code, "value": _value(code, "hourly", station.station_type, rng)}
                     for code in HOURLY_FACTOR
@@ -123,6 +111,10 @@ def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
                 )
                 totals["measurements"] += result["summary"]["created_count"]
                 totals["exceedances"] += result["summary"]["exceeded_count"]
+
+    # 自动汇总生成的日均值及其超标记录一并计入演示数据总量
+    totals["measurements"] = Measurement.query.count()
+    totals["exceedances"] = Exceedance.query.count()
 
     # 标注一部分超标记录, 让工作台同时存在待办与已处理记录
     from .services import exceedance_service

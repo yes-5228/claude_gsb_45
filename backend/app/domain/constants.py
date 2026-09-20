@@ -2,7 +2,12 @@
 
 PERIOD_LABELS = {"hourly": "小时均值", "daily": "日均值"}
 
-DATA_SOURCE_LABELS = {"manual": "手工录入", "device": "设备上传", "import": "历史导入"}
+DATA_SOURCE_LABELS = {
+    "manual": "手工录入",
+    "device": "设备上传",
+    "import": "历史导入",
+    "aggregate": "日均自动汇总",
+}
 
 STATION_TYPE_LABELS = {
     "ambient": "环境空气",

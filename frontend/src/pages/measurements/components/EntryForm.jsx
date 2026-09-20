@@ -200,7 +200,15 @@ export default function EntryForm({ onPreview, onSubmitted }) {
               invalid={Boolean(errors.measured_at)}
             />
           </Field>
-          <Field label="数据周期" required>
+          <Field
+            label="数据周期"
+            required
+            hint={
+              form.period === 'hourly'
+                ? `当日有效小时值达到 ${pollutantData?.daily_min_valid_hours ?? 20} 个后自动生成日均值`
+                : '日均值一般由小时值自动汇总生成'
+            }
+          >
             <Select value={form.period} onChange={setField('period')} options={PERIODS} />
           </Field>
           <Field label="数据来源">

@@ -27,6 +27,7 @@ class Measurement(TimestampMixin, db.Model):
     is_exceeded = db.Column(db.Boolean, nullable=False, default=False, index=True)
     measured_at = db.Column(db.DateTime, nullable=False, index=True)
     data_source = db.Column(db.String(16), nullable=False, default="manual")
+    valid_hours = db.Column(db.Integer)  # 日均自动汇总时记录参与计算的有效小时数
     recorder = db.Column(db.String(64))
     remark = db.Column(db.Text)
 
@@ -59,6 +60,8 @@ class Measurement(TimestampMixin, db.Model):
             "measured_at": iso(self.measured_at),
             "data_source": self.data_source,
             "data_source_label": label_of(DATA_SOURCE_LABELS, self.data_source),
+            "valid_hours": self.valid_hours,
+            "is_auto_aggregated": self.data_source == "aggregate",
             "recorder": self.recorder,
             "remark": self.remark,
             "created_at": iso(self.created_at),

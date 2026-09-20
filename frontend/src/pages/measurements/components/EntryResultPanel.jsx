@@ -30,6 +30,81 @@ function ResultTable({ columns, rows }) {
   )
 }
 
+const DAILY_STATUS = {
+  created: { label: '已生成', tone: 'success' },
+  updated: { label: '已更新', tone: 'info' },
+  incomplete: { label: '数据不完整', tone: 'warning' },
+  removed: { label: '已撤销', tone: 'neutral' },
+  skipped: { label: '未覆盖人工值', tone: 'neutral' }
+}
+
+function DailyAggregationSection({ aggregation }) {
+  const rows = (aggregation.items || []).map((item) => ({ key: item.pollutant, ...item }))
+  const incomplete = rows.filter((item) => item.status === 'incomplete' || item.status === 'removed')
+  const columns = [
+    { key: 'pollutant', title: '监测因子', render: (row) => row.pollutant_label || row.pollutant },
+    {
+      key: 'value',
+      title: '日均值',
+      render: (row) =>
+        row.value === null || row.value === undefined ? (
+          '-'
+        ) : (
+          <span>
+            {formatNumber(row.value)} <span className="muted small">{row.unit || ''}</span>
+            {row.complete ? null : <span className="muted small"> (参考)</span>}
+          </span>
+        )
+    },
+    {
+      key: 'valid_hours',
+      title: '有效小时',
+      render: (row) => `${row.valid_hours} / ${row.required_hours}`
+    },
+    {
+      key: 'status',
+      title: '汇总状态',
+      render: (row) => {
+        const meta = DAILY_STATUS[row.status] || { label: row.status, tone: 'neutral' }
+        return <Tag tone={meta.tone}>{meta.label}</Tag>
+      }
+    },
+    {
+      key: 'exceeded',
+      title: '超标判定',
+      render: (row) => {
+        if (row.status !== 'created' && row.status !== 'updated') return '-'
+        return row.is_exceeded ? (
+          <Tag tone="danger">超标 {formatNumber(row.exceed_ratio, 2)} 倍</Tag>
+        ) : (
+          <Tag tone="success">达标</Tag>
+        )
+      }
+    },
+    { key: 'message', title: '说明', render: (row) => <span className="small muted">{row.message}</span> }
+  ]
+
+  return (
+    <div className="card" style={{ boxShadow: 'none' }}>
+      <div className="card-header">
+        <h3>日均自动汇总 ({aggregation.date})</h3>
+        <span className="hint">当日有效小时数达到 {aggregation.min_valid_hours} 个才会生成日均值</span>
+      </div>
+      <div className="card-body">
+        <div className="stack">
+          {incomplete.length ? (
+            <Alert tone="warning">
+              以下因子当日有效小时数不足, 数据不完整, 未生成日均值:{' '}
+              {incomplete.map((item) => item.pollutant_label || item.pollutant).join(', ')}
+            </Alert>
+          ) : null}
+          <ResultTable columns={columns} rows={rows} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function EntryResultPanel({ result, summary, onClose }) {
   if (!result) {
     return (
@@ -159,6 +234,10 @@ export default function EntryResultPanel({ result, summary, onClose }) {
         )}
 
         <ResultTable columns={columns} rows={rows} />
+
+        {!isPreview && payload.daily_aggregation ? (
+          <DailyAggregationSection aggregation={payload.daily_aggregation} />
+        ) : null}
 
         {payload.duplicates?.length ? (
           <Alert tone="warning">

@@ -22,7 +22,8 @@ const ANNOTATION_OPTIONS = [
 const SOURCE_OPTIONS = [
   { value: 'manual', label: '手工录入' },
   { value: 'device', label: '设备上传' },
-  { value: 'import', label: '历史导入' }
+  { value: 'import', label: '历史导入' },
+  { value: 'aggregate', label: '日均自动汇总' }
 ]
 
 export default function QueryFilters({ value, loading, onSubmit, onReset }) {
